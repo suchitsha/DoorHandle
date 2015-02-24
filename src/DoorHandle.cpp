@@ -35,7 +35,9 @@ public:
 	void run() {
 		//read file
 		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawers_all.oni",
-		pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawer.oni",
+		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawer.oni",
+		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_door3.oni",
+		pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured.oni",
 				false, false);
 		//register callback
 		boost::function<

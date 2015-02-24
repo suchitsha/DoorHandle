@@ -19,6 +19,13 @@
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 
+
+#include <pcl/filters/filter.h>
+#include <pcl/point_cloud.h>
+#include <vector>
+#include <pcl/kdtree/kdtree_flann.h>
+
+
 //TODO remove this when not needed
 #include <pcl/visualization/pcl_visualizer.h>
 using namespace pcl;
@@ -44,18 +51,53 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		// Output datasets
 	    pcl::PointCloud<pcl::Normal>::Ptr cloudNormals (new pcl::PointCloud<pcl::Normal>);
 	    // Use all neighbors in a sphere of radius 3cm
-	    ne.setRadiusSearch (0.01); //TODO put to constants
+	    ne.setRadiusSearch (0.01); //TODO put into constants
 		// Compute the features
 	    ne.compute (*cloudNormals);
 	    
-	    
+
+		//----nearest neighbours----//
+		pcl::KdTreeFLANN<pcl::PointXYZRGBA> kdtree;
+		kdtree.setInputCloud (cloud);
+		std::vector<int> pointIdxRadiusSearch;
+		std::vector<float> pointRadiusSquaredDistance;
+		float radius = 0.05 ;//TODO to constants
+		
+		std::vector<int> indices;
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr outputCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr temp (new pcl::PointCloud<pcl::PointXYZRGBA>);
+		pcl::removeNaNFromPointCloud(*cloud, *outputCloud, indices);
+		for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = outputCloud->begin(); it!= outputCloud->end(); it++){
+			pcl::PointXYZRGBA point ;
+			point.x = it->x;
+			point.y = it->y;
+			point.z = it->z;
+			point.rgba = it->rgba;
+			
+			int r = 255;
+			int g = 0;
+			int b = 0;			
+			int rgb = ((int)r) << 16 | ((int)g) << 8 | ((int)b);
+			
+			if ( kdtree.radiusSearch(point, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0 )
+			{
+				for (size_t i = 0; i < pointIdxRadiusSearch.size (); ++i){
+					point.rgba = rgb;		
+				//	cout << point.rgba;
+				}	
+			}	    	
+							
+		temp->push_back(point);
+		}
+
+
 	    //-----filter out the normals from the ground, ceilling,etc-----//
 	    pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator itCloud = cloud->begin();
 	    for(pcl::PointCloud<pcl::Normal>::iterator it = cloudNormals->begin(); it!= cloudNormals->end(); it++){
 			
 			//check if normal is nearly parallel to z axis ie dot product is > cos(theta)
 			float dotProductZ = it->normal_x*0 + it->normal_y*0 + it->normal_z *1;
-			float angle = 0.97; //TODO put to constants
+			float angle = 0.98; //TODO put to constants
 			
 			//change sign as we only need the magnitude here
 			if (dotProductZ < 0)
@@ -88,7 +130,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		// Mandatory
 		seg.setModelType (pcl::SACMODEL_PLANE);
 		seg.setMethodType (pcl::SAC_RANSAC);
-		seg.setDistanceThreshold (0.01);
+		seg.setDistanceThreshold (0.03);
 
 		seg.setInputCloud (cloudFiltered);
 		seg.segment (*inliers, *coefficients);
@@ -106,7 +148,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		// Extract points above plane, remove the planar inliers, extract the rest
 		//extract.setNegative (true);
 		//extract.filter (*cloudOnplane);
-
+		
 
 
 
@@ -117,12 +159,10 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 	    // --------------------------------------------------------
 	    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
 	    viewer->setBackgroundColor (0, 0, 0);
-	    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGBA> rgb(cloudFiltered);
-	    viewer->addPointCloud<pcl::PointXYZRGBA> (cloudFiltered, rgb, "sample cloud");
+	    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGBA> rgb(temp);
+	    viewer->addPointCloud<pcl::PointXYZRGBA> (cloud, rgb, "sample cloud");
 	    viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
-	    //cout << cloudNormalFiltered->size() ;
-	    //cout << cloudFiltered->size() ;
-	    viewer->addPointCloudNormals<pcl::PointXYZRGBA, pcl::Normal> (cloudFiltered, cloudNormalFiltered, 10, 0.05, "normals");
+	    viewer->addPointCloudNormals<pcl::PointXYZRGBA, pcl::Normal> (cloud, cloudNormals, 10, 0.05, "normals");
 	    viewer->addCoordinateSystem (0.2);
 	    viewer->initCameraParameters ();
 		
