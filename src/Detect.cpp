@@ -72,6 +72,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		// temporary cloud
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tempCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		
+		//traverse over all points
 		pcl::PointCloud<pcl::Normal>::iterator itNorm = cloudNormals->begin();
 		for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = noNANCloud->begin(); it!= noNANCloud->end(); it++){
 			pcl::PointXYZRGBA point ;
@@ -80,12 +81,15 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			point.z = it->z;
 			point.rgba = it->rgba;
 			
-			int r = 255;
-			int g = 0;
+			int r1 = 255;
+			int r2 = 0;
+			int g1 = 0;
+			int g2 = 127;
 			int b = 0;			
-			int rgb = ((int)r) << 16 | ((int)g) << 8 | ((int)b);
-			
-			//find nearest neighbours
+			int rgb1 = ((int)r1) << 16 | ((int)g1) << 8 | ((int)b);
+			int rgb2 = ((int)r2) << 16 | ((int)g2) << 8 | ((int)b);			
+
+			//find nearest neighbours in a radius
 			if ( kdtree.radiusSearch(point, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0 )
 			{	
 				//count of neighbouring normals that don't point in same direction as point 
@@ -105,13 +109,31 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 				//sufficiant number of normals indicating change in direction
 				float percentSupport = 0.2; //TODO to constants
 				if( numNormalDiff > (percentSupport * pointIdxRadiusSearch.size()) ){
-					point.rgba = rgb;		
+					point.rgba = rgb1;		
 				}	
 			}	    	
-							
+		
+		// find K nearest neighbor
+		int K = 50;//TODO to constants
+		float distThresh = 0.06; //TODO to constants
+
+		std::vector<int> pointIdxNKNSearch(K);
+  		std::vector<float> pointNKNSquaredDistance(K);
+	
+		if ( kdtree.nearestKSearch (point, K, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
+		{
+		    for (size_t i = 0; i < pointIdxNKNSearch.size(); ++i){
+				if(pointNKNSquaredDistance[i] > distThresh){
+					//point.rgba = rgb2;
+				}
+			}
+  		}
+
+					
 		tempCloud->push_back(point);
 		itNorm++;
 		}
+		//clear unused
 		noNANCloud->clear();
 		noNANCloud->swap(*tempCloud);
 		tempCloud->clear();
