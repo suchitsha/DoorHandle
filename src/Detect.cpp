@@ -32,6 +32,7 @@ using namespace pcl;
 
 pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
+		
 	    //for filtering normal
 	    pcl::PointCloud<pcl::Normal>::Ptr cloudNormalFiltered (new pcl::PointCloud<pcl::Normal>);
 	    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudFiltered (new pcl::PointCloud<pcl::PointXYZRGBA>);
@@ -40,11 +41,17 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 	    //pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudOnPlane(new pcl::PointCloud<pcl::PointXYZRGBA>);
 	    pcl::ExtractIndices<pcl::PointXYZRGBA> extract; 
 	    
+	    //filter out points with NaN (invalid) values
+	    std::vector<int> indices;
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr noNANCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
+		pcl::removeNaNFromPointCloud(*cloud, *noNANCloud, indices);
+		
+	    
 	    //-----------compute normals------------------//
 	     
 	    // Create the normal estimation class, and pass the input dataset to it
 	    pcl::NormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
-	    ne.setInputCloud (cloud);
+	    ne.setInputCloud (noNANCloud);
 		// Create an empty kdtree representation, and pass it to the normal estimation object. Its content will be filled inside the object, based on the given input dataset (as no other search surface is given).
 	    pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBA> ());
 	    ne.setSearchMethod (tree);
@@ -58,16 +65,15 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 
 		//----nearest neighbours----//
 		pcl::KdTreeFLANN<pcl::PointXYZRGBA> kdtree;
-		kdtree.setInputCloud (cloud);
+		kdtree.setInputCloud (noNANCloud);
 		std::vector<int> pointIdxRadiusSearch;
 		std::vector<float> pointRadiusSquaredDistance;
-		float radius = 0.05 ;//TODO to constants
+		float radius = 0.03 ;//TODO to constants
+		// temporary cloud
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tempCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		
-		std::vector<int> indices;
-		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr outputCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
-		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr temp (new pcl::PointCloud<pcl::PointXYZRGBA>);
-		pcl::removeNaNFromPointCloud(*cloud, *outputCloud, indices);
-		for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = outputCloud->begin(); it!= outputCloud->end(); it++){
+		pcl::PointCloud<pcl::Normal>::iterator itNorm = cloudNormals->begin();
+		for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = noNANCloud->begin(); it!= noNANCloud->end(); it++){
 			pcl::PointXYZRGBA point ;
 			point.x = it->x;
 			point.y = it->y;
@@ -79,20 +85,39 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			int b = 0;			
 			int rgb = ((int)r) << 16 | ((int)g) << 8 | ((int)b);
 			
+			//find nearest neighbours
 			if ( kdtree.radiusSearch(point, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0 )
-			{
-				for (size_t i = 0; i < pointIdxRadiusSearch.size (); ++i){
+			{	
+				//count of neighbouring normals that don't point in same direction as point 
+				int numNormalDiff = 0;
+				//iterate over all neighbours of point
+				for (size_t i = 0; i < pointIdxRadiusSearch.size(); ++i){
+					
+					//get the dot product of normals of point with its neighbour
+					float dotProduct = ( cloudNormals->points[pointIdxRadiusSearch[i]].normal_x * itNorm->normal_x ) + ( cloudNormals->points[pointIdxRadiusSearch[i]].normal_y * itNorm->normal_y ) + ( cloudNormals->points[pointIdxRadiusSearch[i]].normal_z * itNorm->normal_z ) ;
+					float dotThresh = 0.96; //TODO to constants
+					//if angle between normals is more than threshhold
+					if(dotProduct < dotThresh ){
+						numNormalDiff++;
+					}
+					
+				}
+				//sufficiant number of normals indicating change in direction
+				float percentSupport = 0.2; //TODO to constants
+				if( numNormalDiff > (percentSupport * pointIdxRadiusSearch.size()) ){
 					point.rgba = rgb;		
-				//	cout << point.rgba;
 				}	
 			}	    	
 							
-		temp->push_back(point);
+		tempCloud->push_back(point);
+		itNorm++;
 		}
-
-
+		noNANCloud->clear();
+		noNANCloud->swap(*tempCloud);
+		tempCloud->clear();
+		
 	    //-----filter out the normals from the ground, ceilling,etc-----//
-	    pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator itCloud = cloud->begin();
+	    pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator itCloud = noNANCloud->begin();
 	    for(pcl::PointCloud<pcl::Normal>::iterator it = cloudNormals->begin(); it!= cloudNormals->end(); it++){
 			
 			//check if normal is nearly parallel to z axis ie dot product is > cos(theta)
@@ -159,10 +184,10 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 	    // --------------------------------------------------------
 	    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer (new pcl::visualization::PCLVisualizer ("3D Viewer"));
 	    viewer->setBackgroundColor (0, 0, 0);
-	    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGBA> rgb(temp);
-	    viewer->addPointCloud<pcl::PointXYZRGBA> (cloud, rgb, "sample cloud");
+	    pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGBA> rgb(noNANCloud);
+	    viewer->addPointCloud<pcl::PointXYZRGBA> (noNANCloud, rgb, "sample cloud");
 	    viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud");
-	    viewer->addPointCloudNormals<pcl::PointXYZRGBA, pcl::Normal> (cloud, cloudNormals, 10, 0.05, "normals");
+	    viewer->addPointCloudNormals<pcl::PointXYZRGBA, pcl::Normal> (noNANCloud, cloudNormals, 10, 0.05, "normals");
 	    viewer->addCoordinateSystem (0.2);
 	    viewer->initCameraParameters ();
 		
