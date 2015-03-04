@@ -16,28 +16,25 @@
 
 class DoorHandle {
 public:
-	/*DoorHandle() :
+	DoorHandle() :
 			viewer("PCL OpenNI Viewer") {
-	}*/
-	DoorHandle() {
 	}
 
-	/*pcl::visualization::CloudViewer viewer;*/
+	pcl::visualization::CloudViewer viewer;
 	Detect detect;
 	//callback function
 	void cloud_cb_(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
-		/*if (!viewer.wasStopped()) {*/
-			detect.startDetection(cloud);
-			//viewer.showCloud(cloud);
-		/*}*/
+		if (!viewer.wasStopped()) {
+			pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr outCloud;
+			outCloud = detect.startDetection(cloud);
+			viewer.showCloud(outCloud);
+		}
 	}
 
 	void run() {
 		//read file
 		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawers_all.oni",
-		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawer.oni",
-		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_door3.oni",
-		pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured.oni",
+		pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawer.oni",
 				false, false);
 		//register callback
 		boost::function<
@@ -47,13 +44,11 @@ public:
 		interface->registerCallback(f);
 		interface->start();
 
-		while(1){interface->start();}
-		/*//start viewer
+		//start viewer
 		while (!viewer.wasStopped()) {
 			interface->start();
-			//boost::this_thread::sleep (boost::posix_time::seconds (1));
+			boost::this_thread::sleep (boost::posix_time::seconds (1));
 		}
-		*/
 		PCL_INFO("Completed reading file.\n");
 		interface->stop();
 	}

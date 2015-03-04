@@ -13,7 +13,7 @@
 #include <pcl/point_types.h>
 
 
-//todo
+//TODO
 #include <pcl/visualization/pcl_visualizer.h>
 
 using namespace pcl;

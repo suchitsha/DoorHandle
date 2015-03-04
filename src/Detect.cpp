@@ -25,6 +25,17 @@
 #include <vector>
 #include <pcl/kdtree/kdtree_flann.h>
 
+//region growing
+#include <pcl/search/search.h>
+#include <pcl/search/kdtree.h>
+#include <pcl/segmentation/region_growing.h>
+//outlier removal
+#include <pcl/filters/statistical_outlier_removal.h>
+//smoothing
+#include <pcl/filters/bilateral.h>
+//mls
+//#include <pcl/surface/mls.h>
+
 
 //TODO remove this when not needed
 #include <pcl/visualization/pcl_visualizer.h>
@@ -34,21 +45,50 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
 		
 	    //for filtering normal
-	    pcl::PointCloud<pcl::Normal>::Ptr cloudNormalFiltered (new pcl::PointCloud<pcl::Normal>);
-	    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudFiltered (new pcl::PointCloud<pcl::PointXYZRGBA>);
+	    //pcl::PointCloud<pcl::Normal>::Ptr cloudNormalFiltered (new pcl::PointCloud<pcl::Normal>);
+	    //pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudFiltered (new pcl::PointCloud<pcl::PointXYZRGBA>);
 	    //for segmentation
-	    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudPlane(new pcl::PointCloud<pcl::PointXYZRGBA>);
+	    //pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudPlane(new pcl::PointCloud<pcl::PointXYZRGBA>);
 	    //pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudOnPlane(new pcl::PointCloud<pcl::PointXYZRGBA>);
-	    pcl::ExtractIndices<pcl::PointXYZRGBA> extract; 
+	    //pcl::ExtractIndices<pcl::PointXYZRGBA> extract; 
 	    
+	    	    
+	    // Outlier removal for filtering noise 
+	    pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudTemp (new pcl::PointCloud<pcl::PointXYZRGBA>);
+		pcl::StatisticalOutlierRemoval<pcl::PointXYZRGBA> sor;
+		sor.setInputCloud (cloud);
+		sor.setMeanK (50);
+		sor.setStddevMulThresh (1.0);
+		sor.filter (*cloudTemp);
+	    
+	    /*//moving least square
+		pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr mlsTree (new pcl::search::KdTree<pcl::PointXYZRGBA>);
+		pcl::PointCloud<pcl::PointXYZRGBA> mlsPoints;
+		// Init object (second point type is for the normals, even if unused)
+		pcl::MovingLeastSquares<pcl::PointXYZRGBA, pcl::PointNormal> mls;
+		mls.setComputeNormals(false);
+		mls.setInputCloud (cloudTemp);
+		mls.setPolynomialFit (true);
+		mls.setSearchMethod (mlsTree);
+		mls.setSearchRadius (0.03);
+		mls.process (mlsPoints);
+		*/
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudTemp2 (new pcl::PointCloud<pcl::PointXYZRGBA>);
+		pcl::BilateralFilter<pcl::PointXYZRGBA> bFilter;
+		bFilter.setInputCloud(cloudTemp);
+		bFilter.setHalfSize(5.0f);
+		bFilter.setStdDev(0.2f);
+		bFilter.applyFilter(*cloudTemp2); 
+		
 	    //filter out points with NaN (invalid) values
 	    std::vector<int> indices;
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr noNANCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
-		pcl::removeNaNFromPointCloud(*cloud, *noNANCloud, indices);
+		pcl::removeNaNFromPointCloud(*cloudTemp2, *noNANCloud, indices);
+		cloudTemp->clear();
+		cloudTemp2->clear();
 		
 	    
-	    //-----------compute normals------------------//
-	     
+	    /*//-----------compute normals------------------//	     
 	    // Create the normal estimation class, and pass the input dataset to it
 	    pcl::NormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
 	    ne.setInputCloud (noNANCloud);
@@ -61,9 +101,56 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 	    ne.setRadiusSearch (0.01); //TODO put into constants
 		// Compute the features
 	    ne.compute (*cloudNormals);
+	    */
 	    
+	    //----------region growing for normals------------//
+	    pcl::search::Search<pcl::PointXYZRGBA>::Ptr searchTree = boost::shared_ptr<pcl::search::Search<pcl::PointXYZRGBA> > (new pcl::search::KdTree<pcl::PointXYZRGBA>);
+  		pcl::PointCloud <pcl::Normal>::Ptr normals (new pcl::PointCloud <pcl::Normal>);
+  		pcl::NormalEstimation<pcl::PointXYZRGBA, pcl::Normal> normal_estimator;
+  		normal_estimator.setSearchMethod (searchTree);
+ 		normal_estimator.setInputCloud (noNANCloud);
+		normal_estimator.setKSearch (50);
+		normal_estimator.compute (*normals);
+	    
+	    /*pcl::IndicesPtr indicesNormal (new std::vector <int>);
+		pcl::PassThrough<pcl::PointXYZRGBA> pass;
+		pass.setInputCloud (noNANCloud);
+		pass.setFilterFieldName ("z");
+		pass.setFilterLimits (0.0, 1.0);
+		pass.filter (*indicesNormal);
+		*/
+		
+		pcl::RegionGrowing<pcl::PointXYZRGBA, pcl::Normal> reg;
+		reg.setMinClusterSize (50);
+		reg.setMaxClusterSize (1000000);
+		reg.setSearchMethod (searchTree);
+		reg.setNumberOfNeighbours (30);
+		reg.setInputCloud (noNANCloud);
+		//reg.setIndices (indices);
+		reg.setInputNormals (normals);
+		reg.setSmoothnessThreshold (3.0 / 180.0 * M_PI);
+		reg.setCurvatureThreshold (1.0);
 
-		//----nearest neighbours----//
+		std::vector <pcl::PointIndices> clusters;
+		reg.extract (clusters);
+
+	    pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr coloredCloud = reg.getColoredCloudRGBA();
+	    
+		std::cout << "Number of clusters is equal to " << clusters.size () << std::endl;
+		std::cout << "First cluster has " << clusters[0].indices.size () << " points." << endl;
+		std::cout << "These are the indices of the points of the initial" <<
+		std::endl << "cloud that belong to the first cluster:" << std::endl;
+		int counter = 0;
+		while (counter < clusters[0].indices.size ())
+		{
+			std::cout << clusters[0].indices[counter] << ", ";
+			counter++;
+			if (counter % 10 == 0)
+			std::cout << std::endl;
+		}
+		std::cout << std::endl;
+
+		/*//----nearest neighbours----//
 		pcl::KdTreeFLANN<pcl::PointXYZRGBA> kdtree;
 		kdtree.setInputCloud (noNANCloud);
 		std::vector<int> pointIdxRadiusSearch;
@@ -138,7 +225,9 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		noNANCloud->swap(*tempCloud);
 		tempCloud->clear();
 		
-	    //-----filter out the normals from the ground, ceilling,etc-----//
+		*/
+		
+	    /*//-----filter out the normals from the ground, ceilling,etc-----//
 	    pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator itCloud = noNANCloud->begin();
 	    for(pcl::PointCloud<pcl::Normal>::iterator it = cloudNormals->begin(); it!= cloudNormals->end(); it++){
 			
@@ -166,7 +255,9 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			itCloud++;
 			
 		}
+		*/
 		
+		/*
 		//--------------do segmentation------------//
 		pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
 		pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
@@ -195,12 +286,12 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		// Extract points above plane, remove the planar inliers, extract the rest
 		//extract.setNegative (true);
 		//extract.filter (*cloudOnplane);
-		
+		*/
 
 
 
 	    
-	    // uncomment this for normal visuallization, and remove visualizer from doorHandle.cpp or use doorHandle.cpp_normalVisualisation
+	    /*// uncomment this for normal visuallization, and remove visualizer from doorHandle.cpp or use doorHandle.cpp_normalVisualisation
 		// --------------------------------------------------------
 	    // -----Open 3D viewer and add point cloud and normals-----
 	    // --------------------------------------------------------
@@ -218,6 +309,6 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		    viewer->spinOnce (1000);
 		    boost::this_thread::sleep (boost::posix_time::microseconds (100000));
   		}
-		//*/		
-	    return cloud;
+		*/		
+	    return coloredCloud;
 }
