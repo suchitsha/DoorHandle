@@ -31,10 +31,10 @@
 #include <pcl/segmentation/region_growing.h>
 //outlier removal
 #include <pcl/filters/statistical_outlier_removal.h>
-//smoothing
-#include <pcl/filters/bilateral.h>
 //mls
-//#include <pcl/surface/mls.h>
+#include <pcl/surface/mls.h>
+
+#include <pcl/filters/voxel_grid.h>
 
 
 //TODO remove this when not needed
@@ -61,32 +61,46 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		sor.setStddevMulThresh (1.0);
 		sor.filter (*cloudTemp);
 	    
-	    /*//moving least square
-		pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr mlsTree (new pcl::search::KdTree<pcl::PointXYZRGBA>);
-		pcl::PointCloud<pcl::PointXYZRGBA> mlsPoints;
-		// Init object (second point type is for the normals, even if unused)
-		pcl::MovingLeastSquares<pcl::PointXYZRGBA, pcl::PointNormal> mls;
-		mls.setComputeNormals(false);
-		mls.setInputCloud (cloudTemp);
-		mls.setPolynomialFit (true);
-		mls.setSearchMethod (mlsTree);
-		mls.setSearchRadius (0.03);
-		mls.process (mlsPoints);
-		*/
+	    /*//mls
+	    pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBA>);
+        // Output has the same type as the input one, it will be only smoothed
+        pcl::PointCloud<pcl::PointXYZRGBA> mls_points;
+        // Init object (second point type is for the normals, even if unused)
+        pcl::MovingLeastSquares<pcl::PointXYZRGBA, pcl::PointNormal> mls;
+               
+         // Optionally, a pointer to a cloud can be provided, to be set by MLS
+        pcl::PointCloud<pcl::PointNormal>::Ptr mls_normals (new pcl::PointCloud<pcl::PointNormal> ());
+        mls.setOutputNormals (mls_normals);
+        cout<<"SUPERMUESTRO INICIADA..."<<endl;
+        // Set parameters
+		       
+        mls.setInputCloud (cloudTemp);
+        mls.setPolynomialFit (true);
+        mls.setSearchMethod (tree);
+        mls.setSearchRadius (0.03);
+        mls.setUpsamplingMethod(pcl::MovingLeastSquares<pcl::PointXYZRGBA,pcl::PointNormal>::VOXEL_GRID_DILATION);
+        mls.setDilationVoxelSize(0.002);
+        mls.setPolynomialOrder(4);
+        // Reconstruct
+        mls.reconstruct (mls_points); 
+        */
+        
+        
+		// Create the filtering object
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudTemp2 (new pcl::PointCloud<pcl::PointXYZRGBA>);
-		pcl::BilateralFilter<pcl::PointXYZRGBA> bFilter;
-		bFilter.setInputCloud(cloudTemp);
-		bFilter.setHalfSize(5.0f);
-		bFilter.setStdDev(0.2f);
-		bFilter.applyFilter(*cloudTemp2); 
+		pcl::VoxelGrid<pcl::PointXYZRGBA> vox;
+		vox.setInputCloud (cloudTemp);
+		vox.setLeafSize (0.02f, 0.02f, 0.02f);
+		vox.filter (*cloudTemp2);
+
 		
-	    //filter out points with NaN (invalid) values
+		
+	    //-------------filter out points with NaN (invalid) values--------------//
 	    std::vector<int> indices;
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr noNANCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		pcl::removeNaNFromPointCloud(*cloudTemp2, *noNANCloud, indices);
 		cloudTemp->clear();
 		cloudTemp2->clear();
-		
 	    
 	    /*//-----------compute normals------------------//	     
 	    // Create the normal estimation class, and pass the input dataset to it
@@ -137,19 +151,10 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 	    pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr coloredCloud = reg.getColoredCloudRGBA();
 	    
 		std::cout << "Number of clusters is equal to " << clusters.size () << std::endl;
-		std::cout << "First cluster has " << clusters[0].indices.size () << " points." << endl;
-		std::cout << "These are the indices of the points of the initial" <<
-		std::endl << "cloud that belong to the first cluster:" << std::endl;
-		int counter = 0;
-		while (counter < clusters[0].indices.size ())
-		{
-			std::cout << clusters[0].indices[counter] << ", ";
-			counter++;
-			if (counter % 10 == 0)
-			std::cout << std::endl;
-		}
-		std::cout << std::endl;
-
+		std::cout << "Third cluster has " << clusters[2].indices.size () << " points." << endl;
+		std::cout << "width and height are:" << coloredCloud->width << "@" << coloredCloud->height << "@" << coloredCloud->isOrganized() << "@" << std::endl;
+		
+		
 		/*//----nearest neighbours----//
 		pcl::KdTreeFLANN<pcl::PointXYZRGBA> kdtree;
 		kdtree.setInputCloud (noNANCloud);
