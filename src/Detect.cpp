@@ -33,7 +33,7 @@
 #include <pcl/filters/statistical_outlier_removal.h>
 //mls
 #include <pcl/surface/mls.h>
-
+// filter
 #include <pcl/filters/voxel_grid.h>
 
 
@@ -44,6 +44,8 @@ using namespace pcl;
 pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
 		
+		Eigen::Vector3f axis = Eigen::Vector3f(0.0,1.0,0.0);
+		 
 	    //for filtering normal
 	    //pcl::PointCloud<pcl::Normal>::Ptr cloudNormalFiltered (new pcl::PointCloud<pcl::Normal>);
 	    //pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudFiltered (new pcl::PointCloud<pcl::PointXYZRGBA>);
@@ -145,15 +147,165 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		reg.setSmoothnessThreshold (3.0 / 180.0 * M_PI);
 		reg.setCurvatureThreshold (1.0);
 
-		std::vector <pcl::PointIndices> clusters;
+		std::vector<pcl::PointIndices> clusters;
 		reg.extract (clusters);
-
-	    pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr coloredCloud = reg.getColoredCloudRGBA();
-	    
-		std::cout << "Number of clusters is equal to " << clusters.size () << std::endl;
-		std::cout << "Third cluster has " << clusters[2].indices.size () << " points." << endl;
-		std::cout << "width and height are:" << coloredCloud->width << "@" << coloredCloud->height << "@" << coloredCloud->isOrganized() << "@" << std::endl;
 		
+		//uncomment to see coloured segments
+		//pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr coloredCloud = reg.getColoredCloudRGBA();
+   		pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr coloredCloud;
+   		
+		//std::cout << "Number of clusters is equal to " << clusters.size () << std::endl;
+		//std::cout << "Third cluster has " << clusters[2].indices.size () << " points." << endl;
+		//std::cout << "width and height are:" << coloredCloud->width << "@" << coloredCloud->height << "@" << coloredCloud->isOrganized() << "@" << std::endl;
+		
+		//iterate over clusters
+		std::vector<std::vector<float> > boundaries;
+		std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr > segments ;//(new std::vector<pcl::PointCloud<pcl::PointXYZRGBA> >);
+		for(int i=0; i<clusters.size(); i++)
+		{	
+			//remove clusters with few points
+			if(clusters[i].indices.size() > 10)
+			{
+				std::cout << "size of:" << i <<":" << clusters[i].indices.size();
+				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr segCloud (new pcl::PointCloud <pcl::PointXYZRGBA>);
+				//get points in one segment into a cloud
+				for(int j=0; j<clusters[i].indices.size(); j++)
+				{
+					pcl::PointXYZRGBA p = noNANCloud->at(clusters[i].indices[j]);
+					segCloud->push_back(p);
+				}
+				
+				//fit plane
+				pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+				pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+				// Create the segmentation object
+				pcl::SACSegmentation<pcl::PointXYZRGBA> seg;
+				// Optional
+				seg.setOptimizeCoefficients (true);
+				// Mandatory
+				seg.setModelType (SACMODEL_PARALLEL_PLANE);
+				seg.setMethodType (pcl::SAC_RANSAC);
+				//TODO try out these parameters
+				seg.setDistanceThreshold (0.01);
+				seg.setEpsAngle( 30.0f * (M_PI/180.0f) );
+				seg.setAxis(axis);
+				seg.setInputCloud (segCloud);
+				seg.segment (*inliers, *coefficients);
+
+				if (inliers->indices.size() == 0)
+				{
+					//TODO remove the cloud that does not fit
+					std::cout << "Could not estimate a planar model for the given dataset." << std::endl ;
+				}else 
+				{
+					std::cout << "Estimated a planar model." << std::endl;
+					
+					//max and min x and y for each cluster
+					float maxX;
+					float maxY;
+					float minX;
+					float minY;
+					float avgZ;
+					for(int j=0; j < inliers->indices.size(); j++)
+					{
+						pcl::PointXYZRGBA p = noNANCloud->at(inliers->indices[j]);
+						if(j == 0)
+						{
+							maxX = p.x;
+							maxY = p.y;
+							minX = p.x;
+							minY = p.y;
+						}
+						if(p.x > maxX)
+						{
+							maxX = p.x;
+						}
+						if(p.x < minX)
+						{
+							minX = p.x;
+						}
+						if(p.y > maxY)
+						{
+							maxY = p.y;
+						}
+						if(p.y < minY)
+						{
+							minY = p.y;
+						}
+						avgZ = avgZ + p.z;
+					}
+					if(clusters[i].indices.size() != 0)
+					{
+						avgZ = avgZ/clusters[i].indices.size();
+					}
+					std::cout << "for cluster " << i << " max min values are " << maxX << " "<< minX << " "<< maxY << " "<< minY << " " << avgZ << std::endl;
+					std::vector<float> tempBound;
+					tempBound.push_back(maxX);
+					tempBound.push_back(maxY);
+					tempBound.push_back(minX);
+					tempBound.push_back(minY);
+					boundaries.push_back(tempBound);
+					
+					// Extract the inliers
+					pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tempPlane (new pcl::PointCloud<pcl::PointXYZRGBA>);
+					pcl::ExtractIndices<pcl::PointXYZRGBA> extract;
+					extract.setInputCloud (segCloud);
+					extract.setIndices (inliers);
+					extract.setNegative (false);
+					extract.filter (*tempPlane);
+					
+					// as plane satisfies boundary conditions add plane
+					segments.push_back(tempPlane);
+
+				}
+			}
+		}
+
+		//check for background planes
+		std::vector<std::vector<float> > inboundaries;
+		std::vector<int> ignoreList;
+		for(int l=0; l < boundaries.size(); l++)
+		{	
+			for(int m=0; m < boundaries.size(); m++)
+			{	
+				if(l != m)
+				{	
+					if(boundaries[l].at(0) >= boundaries[m].at(0) )
+					{
+						if(boundaries[l].at(1) >= boundaries[m].at(1) )
+						{
+							if(boundaries[l].at(2) <= boundaries[m].at(2) )
+							{
+								if(boundaries[l].at(3) <= boundaries[m].at(3) )
+								{
+									ignoreList.push_back(l);
+								}							
+							}	
+						}							
+					}
+				}
+			}
+		}
+		//TODO
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr a (new pcl::PointCloud<pcl::PointXYZRGBA>);
+		for(int i=0; i < segments.size(); i++)
+		{
+			if( std::find(ignoreList.begin(), ignoreList.end(), i) != ignoreList.end() ) 
+			{
+				// ignoreList contains index so ignore 
+			} else 
+			{
+				// ignoreList does not contain index
+					*a += *segments[i];
+			}
+		}
+		coloredCloud = a;
+		a->clear();
+		
+		//TODO 
+		//TODO  check if plane_parallel_ransac is working as expected
+		//TODO 
+		//TODO  
 		
 		/*//----nearest neighbours----//
 		pcl::KdTreeFLANN<pcl::PointXYZRGBA> kdtree;
