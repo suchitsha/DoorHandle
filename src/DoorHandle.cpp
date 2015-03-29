@@ -11,6 +11,7 @@
 #include <pcl/point_types.h>
 #include <pcl/io/oni_grabber.h>
 #include <pcl/io/pcd_io.h>
+#include <pcl/io/pcd_grabber.h>
 
 #include "Detect.h"
 
@@ -27,15 +28,25 @@ public:
 		if (!viewer.wasStopped()) {
 			pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr outCloud;
 			outCloud = detect.startDetection(cloud);
-			viewer.showCloud(outCloud);
+				viewer.showCloud(outCloud);
 		}
 	}
 
 	void run() {
 		//read file
+		// for oni file uncomment code below
 		pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured.oni",
 		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawer.oni",
 				false, false);
+		
+		/*
+		//for pcd file uncomment code below
+		boost::shared_ptr<pcl::PCDGrabber<pcl::PointXYZRGBA> > interface;
+		interface.reset (new pcl::PCDGrabber<pcl::PointXYZRGBA> ("../data/other/kitchen/Rf3.pcd", 1, true)); 			
+		*/
+		
+		
+		
 		//register callback
 		boost::function<
 				void(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr&)> f =

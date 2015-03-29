@@ -36,9 +36,9 @@
 // filter
 #include <pcl/filters/voxel_grid.h>
 
-
-//#include <pcl/features/moment_of_inertia_estimation.h>
-//#include <boost/thread/thread.hpp>
+//hull
+#include <pcl/surface/convex_hull.h>
+#include <pcl/filters/crop_hull.h>
 
 //TODO remove this when not needed
 #include <pcl/visualization/pcl_visualizer.h>
@@ -104,7 +104,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 	    std::vector<int> indices;
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr noNANCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		pcl::removeNaNFromPointCloud(*cloudTemp2, *noNANCloud, indices);
-		cloudTemp->clear();
+		cloudTemp->clear(); //TODO uncomment this if this cloud is not used later in code (in bounding box)
 		cloudTemp2->clear();
 	    
 	    /*//-----------compute normals------------------//	     
@@ -163,6 +163,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		
 		//iterate over clusters
 		std::vector<std::vector<float> > boundaries;
+		std::vector<std::vector<float> > planeCoeff;
 		std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr > segments ;//(new std::vector<pcl::PointCloud<pcl::PointXYZRGBA> >);
 		std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr > segmentsOutliers ;
 		for(int i=0; i<clusters.size(); i++)
@@ -170,7 +171,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			//remove clusters with few points
 			if(clusters[i].indices.size() > 100) //TODO choose correct value
 			{
-				std::cout << "size of:" << i <<":" << clusters[i].indices.size();
+				std::cout << "size of cluster indices:" << i <<":" << clusters[i].indices.size() << std::endl ;
 				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr segCloud (new pcl::PointCloud <pcl::PointXYZRGBA>);
 				//get points in one segment into a cloud
 				for(int j=0; j<clusters[i].indices.size(); j++)
@@ -190,7 +191,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 				seg.setModelType (SACMODEL_PARALLEL_PLANE);
 				seg.setMethodType (pcl::SAC_RANSAC);
 				//TODO try out these parameters
-				seg.setDistanceThreshold (0.01);
+				seg.setDistanceThreshold (0.02);
 				seg.setEpsAngle( 30.0f * (M_PI/180.0f) );
 				seg.setAxis(axis);
 				seg.setInputCloud (segCloud);
@@ -210,8 +211,10 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 						//max and min x and y for each cluster
 						float maxX;
 						float maxY;
+						//float maxZ;
 						float minX;
 						float minY;
+						//float minZ;
 						float avgZ;
 						for(int j=0; j < inliers->indices.size(); j++)
 						{
@@ -246,13 +249,24 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 							avgZ = avgZ/clusters[i].indices.size();
 						}
 						std::cout << "for cluster " << i << " max min values are " << maxX << " "<< minX << " "<< maxY << " "<< minY << " " << avgZ << std::endl;
+						std::cout << "for segment " << segments.size() << " max min values are " << maxX << " "<< minX << " "<< maxY << " "<< minY << " " << avgZ << std::endl;
+						//save boundries or size of plane
 						std::vector<float> tempBound;
 						tempBound.push_back(maxX);
 						tempBound.push_back(maxY);
 						tempBound.push_back(minX);
 						tempBound.push_back(minY);
 						boundaries.push_back(tempBound);
-					
+						//std::cout << "for cluster " << i << " max min values are " << boundaries[i].at(0) << " "<< boundaries[i].at(2) << " "<< boundaries[i].at(1) << " "<< boundaries[i].at(3) << " " << avgZ << std::endl;
+						
+						//save plane coefficients for the segment
+						std::vector<float> tempcoefficients;
+						tempcoefficients.push_back(coefficients->values[0]);
+						tempcoefficients.push_back(coefficients->values[1]);
+						tempcoefficients.push_back(coefficients->values[2]);
+						tempcoefficients.push_back(coefficients->values[3]);
+						planeCoeff.push_back(tempcoefficients);
+						
 						// Extract the inliers
 						pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tempPlane (new pcl::PointCloud<pcl::PointXYZRGBA>);
 						pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tempOnPlane (new pcl::PointCloud<pcl::PointXYZRGBA>);
@@ -274,9 +288,10 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 				}
 			}
 		}
-
+		std::cout << "sizes " << boundaries.size() << " " <<  segments.size() << " " << segmentsOutliers.size() << std::endl;
 		//check for background planes
-		float percentOfSize = 0.10; //TODO to constants
+		float percentOfSize = 0.05; //TODO to constants
+		float sizeThresh = -0.10;//TODO to constants TODO the value should be smaller when kinect is closer
 		std::vector<std::vector<float> > inboundaries;
 		std::vector<int> ignoreList;
 		for(int l=0; l < boundaries.size(); l++)
@@ -285,13 +300,13 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			{	
 				if(l != m)
 				{	
-					if(boundaries[l].at(0) >= boundaries[m].at(0) )
+					if( (boundaries[l].at(0) + sizeThresh) >= boundaries[m].at(0) )
 					{
-						if(boundaries[l].at(1) >= boundaries[m].at(1) )
+						if( (boundaries[l].at(1) + sizeThresh) >= boundaries[m].at(1) )
 						{
-							if(boundaries[l].at(2) <= boundaries[m].at(2) )
+							if( (boundaries[l].at(2) - sizeThresh) <= boundaries[m].at(2) )
 							{
-								if(boundaries[l].at(3) <= boundaries[m].at(3) )
+								if( (boundaries[l].at(3) - sizeThresh) <= boundaries[m].at(3) )
 								{	
 									//if plane inside is large enough, this is to eliminate wrong values due to noise or small structures in a plane
 									if( percentOfSize*segments[l]->size() < segments[m]->size() )
@@ -309,7 +324,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		//TODO
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr planes (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr outliers (new pcl::PointCloud<pcl::PointXYZRGBA>);
-		for(int i=0; i < segments.size(); i++)
+		for(int i=0; i < boundaries.size(); i++)
 		{
 			if( std::find(ignoreList.begin(), ignoreList.end(), i) != ignoreList.end() ) 
 			{
@@ -318,67 +333,162 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			{
 				// ignoreList does not contain index
 				std::cout << "showing cloud: " << i << " of size: " << segments[i]->size() << std::endl;	
-				*outliers = *segmentsOutliers[i];
-				if (this->o.size() < 15)
+				std::cout << "showing cloud: " << i << " of boundary: " << boundaries[i].at(0) << " " << boundaries[i].at(1) << " "<< boundaries[i].at(2) << " " << boundaries[i].at(3)  << std::endl;	
+				
+				*outliers += *segmentsOutliers[i];
+				//*planes += *segments[i];//TODO uncomment this to display planes
+				
+				//check if point lies within boundries of the plane
+				float minDistThresh = -0.015; //TODO to constants
+				float maxDistThresh = -0.20; //TODO to constants
+				
+				int green = ((int)0) << 16 | ((int)255) << 8 | ((int)255);
+				int grey = ((int)1) << 16 | ((int)1) << 8 | ((int)1);
+				int redl = ((int)10) << 16 | ((int)0) << 8 | ((int)0);
+				//TODO this should use noNANCloud and not segments
+				//for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = segments[i]->begin(); it!= segments[i]->end(); it++)
+				for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = noNANCloud->begin(); it!= noNANCloud->end(); it++)
 				{
-					this->o.push_back(segmentsOutliers[i]);
-				} else 
-				{
-					this->o.push_back(segmentsOutliers[i]);
-					//o.pop_front(); //TODO
+					//put the point in plane equation of segment[i] ax + by + cz +d = val and minThresh < val < maxThresh
+					float val = planeCoeff[i].at(0)*it->x + planeCoeff[i].at(1)*it->y + planeCoeff[i].at(2)*it->z + planeCoeff[i].at(3) ;
+					
+					pcl::PointXYZRGBA p ;
+					p.x = it->x;
+					p.y = it->y;
+					p.z = it->z;
+					p.rgb = grey;
+					
+					//std::cout << "boundaries for seg: " << i << ":" << boundaries[i].at(0) << ":"  << boundaries[i].at(1) << ": " << boundaries[i].at(2) << " " << boundaries[i].at(3) << std::endl;
+					//check if x y of point lies in the required range
+					if(boundaries[0].at(0) > p.x )
+					{ 
+						if(boundaries[0].at(1) > p.y )
+						{ 
+							if(boundaries[0].at(2) < p.x )
+							{ 
+								if( boundaries[0].at(3) < p.y )
+								{	
+									//if z of point is between the required range
+									if(val < minDistThresh)
+									{
+										if(val > maxDistThresh)
+										{	
+											//pcl::PointXYZRGBA p ;
+											//p.x = it->x;
+											//p.y = it->y;
+											//p.z = it->z;
+											p.rgb = green;//it->rgb;														
+											//planes->push_back(p);
+											//cout << "value and plane coeff: " << val << " " << planeCoeff[i].at(0) << " " << planeCoeff[i].at(1) << planeCoeff[i].at(2) << planeCoeff[i].at(3) << endl;
+										}
+									}
+								} else{
+									p.rgb = redl;
+								}
+							}
+						}
+					}
+					
+					planes->push_back(p);
 				}
 				
+				/*for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it1 = segmentsOutliers[i]->begin(); it1 != segmentsOutliers[i]->end(); it1++)
+				{
+					//put the point in plane equation of segment[i] ax + by + cz +d = val and minThresh < val < maxThresh
+					float val = planeCoeff[i].at(0)*it1->x + planeCoeff[i].at(1)*it1->y + planeCoeff[i].at(2)*it1->z + planeCoeff[i].at(3) ;
+					
+					pcl::PointXYZRGBA p ;
+					p.x = it1->x;
+					p.y = it1->y;
+					p.z = it1->z;
+					p.rgb = grey;
+					
+					//check if x y of point lies in the required range
+					if(boundaries[i].at(0) > p.x )
+					{ 
+						if(boundaries[i].at(1) > p.y )
+						{ 
+							if(boundaries[i].at(2) < p.x )
+							{ 
+								if( boundaries[i].at(3) < p.y )
+								{	
+									//if z of point is between the required range
+									if(val < minDistThresh)
+									{
+										if(val > maxDistThresh)
+										{	
+											//pcl::PointXYZRGBA p ;
+											//p.x = it1->x;
+											//p.y = it1->y;
+											//p.z = it1->z;
+											p.rgb = green;//it1->rgb;														
+											//planes->push_back(p);
+											//cout << "value and plane coeff: " << val << " " << planeCoeff[i].at(0) << " " << planeCoeff[i].at(1) << planeCoeff[i].at(2) << planeCoeff[i].at(3) << endl;
+										}
+									}
+								}
+							}
+						}
+					}
+					planes->push_back(p);
+				}
+				*/
+
+				/* for adding outliers over multiple frames	
+				if (this->o.size() < 15)
+					{
+						this->o.push_back(segmentsOutliers[i]);
+					} else 
+					{
+						this->o.push_back(segmentsOutliers[i]);
+						//o.pop_front(); //TODO
+					}*/
 				
-				*planes += *segments[i];
-			
-		/*
-				//bounding box
-				pcl::MomentOfInertiaEstimation <pcl::PointXYZRGBA> feature_extractor;
-				feature_extractor.setInputCloud (segments[i]);
-				feature_extractor.compute();
-
-				std::vector <float> moment_of_inertia;
-				std::vector <float> eccentricity;
-				pcl::PointXYZRGBA min_point_AABB;
-				pcl::PointXYZRGBA max_point_AABB;
-				pcl::PointXYZRGBA min_point_OBB;
-				pcl::PointXYZRGBA max_point_OBB;
-				pcl::PointXYZRGBA position_OBB;
-				Eigen::Matrix3f rotational_matrix_OBB;
-				float major_value, middle_value, minor_value;
-				Eigen::Vector3f major_vector, middle_vector, minor_vector;
-				Eigen::Vector3f mass_center;
-
-				feature_extractor.getMomentOfInertia (moment_of_inertia);
-				feature_extractor.getEccentricity (eccentricity);
-				feature_extractor.getAABB (min_point_AABB, max_point_AABB);
-				feature_extractor.getOBB (min_point_OBB, max_point_OBB, position_OBB, rotational_matrix_OBB)
-				feature_extractor.getEigenValues (major_value, middle_value, minor_value);
-				feature_extractor.getEigenVectors (major_vector, middle_vector, minor_vector);
-				feature_extractor.getMassCenter (mass_center);
 				
-				//viewer->addCube (min_point_AABB.x, max_point_AABB.x, min_point_AABB.y, max_point_AABB.y, min_point_AABB.z, max_point_AABB.z, 1.0, 1.0, 0.0, "AABB");
+				/*// uncommment this to see covex hull points
+				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr temp (new pcl::PointCloud<pcl::PointXYZRGBA>);
+				temp = segments[i];
+				pcl::ConvexHull<pcl::PointXYZRGBA> hull;
+				hull.setInputCloud(temp);
+				hull.setDimension(3);
+				std::vector<pcl::Vertices> polygons;
+				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr surfaceHull (new pcl::PointCloud<pcl::PointXYZRGBA>);
+				hull.reconstruct(*surfaceHull, polygons);
+				for(int i = 0; i < polygons.size(); i++)
+				{
+					std::cout << " vertices of hull: " << polygons.size() << " : "<< i << " : " << polygons[i] << std::endl;
+				}	
+				
+				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr objects (new pcl::PointCloud<pcl::PointXYZRGBA>);
+				pcl::CropHull<pcl::PointXYZRGBA> bbFilter;
 
-				Eigen::Vector3f position (position_OBB.x, position_OBB.y, position_OBB.z);
-				Eigen::Quaternionf quat (rotational_matrix_OBB);
-				//viewer->addCube (position, quat, max_point_OBB.x - min_point_OBB.x, max_point_OBB.y - min_point_OBB.y, max_point_OBB.z - min_point_OBB.z, "OBB");
+				bbFilter.setDim(3);
+				bbFilter.setInputCloud(noNANCloud);
+				bbFilter.setHullIndices(polygons);
+				bbFilter.setHullCloud(temp);
+				bbFilter.setCropOutside(true);
+				bbFilter.filter(*objects);
+				std::cout << "size of objects is: " << objects->size() << std::endl;
 
-				std::cout << min_point_AABB.x << max_point_AABB.x << min_point_AABB.y << max_point_AABB.y << min_point_AABB.z << max_point_AABB.z << std::endl;    				
-			
-			*/
-			
-			
-			
+				*planes += *objects;
+				//*planes += *surfaceHull;
+				*/
+ 
+//std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr> o;// ( new std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr>);				
 			}
 		}
 		
+		/*
+		//colour the outliers red
 		for (pcl::PointCloud<pcl::PointXYZRGBA>::iterator it = outliers->points.begin(); it < outliers->points.end(); it++)
     	{	
     		int red = ((int)255) << 16 | ((int)0) << 8 | ((int)0);
-    		it->rgb= red;
+    		it->rgb = red;
     	}
+    	*/
     	
     	//TODO
+    	/*
     	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr out;
     	for(int i=0; i < this->o.size(); i++)
     	{
@@ -391,9 +501,9 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
     	}
     	//TODO
     	*planes += *out;
+    	*/
     	
-    	
-    	*planes += *outliers;
+    	//*planes += *outliers;
     	
     	
     	

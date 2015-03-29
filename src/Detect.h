@@ -27,9 +27,6 @@ public:
 
 	pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr startDetection(
 			const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud);
-			
-	//TODO		
-	static std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr> o ( new std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr>);	
 	
 	log4cxx::LoggerPtr logger;
 
