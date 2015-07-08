@@ -445,7 +445,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 					}*/
 				
 				
-				/*// uncommment this to see covex hull points
+				/*// uncommment this to see convex hull points
 				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr temp (new pcl::PointCloud<pcl::PointXYZRGBA>);
 				temp = segments[i];
 				pcl::ConvexHull<pcl::PointXYZRGBA> hull;
@@ -505,13 +505,22 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
     	
     	//*planes += *outliers;
     	
-    	
-    	
-    	
+		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr newCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
+    	//for(int i =0;i<segments.size();i++)
+    	{
+			for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it1 = segments[0]->begin(); it1 != segments[0]->end(); it1++)
+    		{
+    			pcl::PointXYZRGBA p ;
+				p.x = it1->x;
+				p.y = it1->y;
+				p.z = it1->z;
+				p.rgb = it1->rgb;
+    			newCloud->push_back(p);
+    		}
 
-    	
-    	
-		coloredCloud = planes;
+    	}
+    	coloredCloud = newCloud;
+		//coloredCloud = planes;
 		//a->clear();
 		//TODO clear segments and all other clouds after use
 		//TODO 

@@ -14,6 +14,7 @@
 #include <pcl/io/pcd_grabber.h>
 
 #include "Detect.h"
+#include "GNG.h"
 
 class DoorHandle {
 public:
@@ -23,12 +24,17 @@ public:
 
 	pcl::visualization::CloudViewer viewer;
 	Detect detect;
+
+    //for GNG
+    GNG gng;
 	//callback function
 	void cloud_cb_(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
 		if (!viewer.wasStopped()) {
 			pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr outCloud;
-			outCloud = detect.startDetection(cloud);
-				viewer.showCloud(outCloud);
+            outCloud = detect.startDetection(cloud);
+            //outCloud = gng.startGNG(cloud);
+            viewer.showCloud(outCloud);
+            //usleep(5000000);
 		}
 	}
 
