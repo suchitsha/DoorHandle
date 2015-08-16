@@ -95,7 +95,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudTemp2 (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		pcl::VoxelGrid<pcl::PointXYZRGBA> vox;
 		vox.setInputCloud (cloudTemp);
-		vox.setLeafSize (0.02f, 0.02f, 0.02f);//TODO check whats better
+        vox.setLeafSize (0.02f, 0.02f, 0.02f);//TODO check whats better
 		vox.filter (*cloudTemp2);
 
 		
@@ -147,11 +147,11 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		reg.setInputCloud (noNANCloud);
 		//reg.setIndices (indices);
 		reg.setInputNormals (normals);
-		reg.setSmoothnessThreshold (3.0 / 180.0 * M_PI);
+        reg.setSmoothnessThreshold (3.0 / 180.0 * M_PI);//3
 		reg.setCurvatureThreshold (1.0);
 
 		std::vector<pcl::PointIndices> clusters;
-		reg.extract (clusters);
+        reg.extract (clusters);
 		
 		//uncomment to see coloured segments
 		//pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr coloredCloud = reg.getColoredCloudRGBA();
@@ -169,9 +169,9 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		for(int i=0; i<clusters.size(); i++)
 		{	
 			//remove clusters with few points
-			if(clusters[i].indices.size() > 100) //TODO choose correct value
+            if(clusters[i].indices.size() > 100) //TODO choose correct value
 			{
-				std::cout << "size of cluster indices:" << i <<":" << clusters[i].indices.size() << std::endl ;
+                //std::cout << "size of cluster indices:" << i <<":" << clusters[i].indices.size() << std::endl ;
 				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr segCloud (new pcl::PointCloud <pcl::PointXYZRGBA>);
 				//get points in one segment into a cloud
 				for(int j=0; j<clusters[i].indices.size(); j++)
@@ -191,9 +191,9 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 				seg.setModelType (SACMODEL_PARALLEL_PLANE);
 				seg.setMethodType (pcl::SAC_RANSAC);
 				//TODO try out these parameters
-				seg.setDistanceThreshold (0.02);
-				seg.setEpsAngle( 30.0f * (M_PI/180.0f) );
-				seg.setAxis(axis);
+                seg.setDistanceThreshold (0.02);//2
+                seg.setEpsAngle( 30.0f * (M_PI/180.0f) );
+                seg.setAxis(axis);
 				seg.setInputCloud (segCloud);
 				seg.segment (*inliers, *coefficients);
 
@@ -204,9 +204,9 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 				}else 
 				{
 					//ignore too small clouds
-					if(inliers->indices.size() > 100) //TODO choose correct value
+                    if(inliers->indices.size() > 100) //TODO choose correct value
 					{
-						std::cout << "Estimated a planar model." << std::endl;
+                        //std::cout << "Estimated a planar model." << std::endl;
 					
 						//max and min x and y for each cluster
 						float maxX;
@@ -218,7 +218,8 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 						float avgZ;
 						for(int j=0; j < inliers->indices.size(); j++)
 						{
-							pcl::PointXYZRGBA p = noNANCloud->at(inliers->indices[j]);
+                            //TODO replaced the line below with this //  pcl::PointXYZRGBA p = noNANCloud->at(inliers->indices[j]);
+                            pcl::PointXYZRGBA p = segCloud->at(inliers->indices[j]);
 							if(j == 0)
 							{
 								maxX = p.x;
@@ -248,8 +249,8 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 						{
 							avgZ = avgZ/clusters[i].indices.size();
 						}
-						std::cout << "for cluster " << i << " max min values are " << maxX << " "<< minX << " "<< maxY << " "<< minY << " " << avgZ << std::endl;
-						std::cout << "for segment " << segments.size() << " max min values are " << maxX << " "<< minX << " "<< maxY << " "<< minY << " " << avgZ << std::endl;
+                        //std::cout << "for cluster " << i << " max min values are " << maxX << " "<< minX << " "<< maxY << " "<< minY << " " << avgZ << std::endl;
+                        //std::cout << "for segment " << segments.size() << " max min values are " << maxX << " "<< minX << " "<< maxY << " "<< minY << " " << avgZ << std::endl;
 						//save boundries or size of plane
 						std::vector<float> tempBound;
 						tempBound.push_back(maxX);
@@ -288,10 +289,10 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 				}
 			}
 		}
-		std::cout << "sizes " << boundaries.size() << " " <<  segments.size() << " " << segmentsOutliers.size() << std::endl;
+        //std::cout << "sizes " << boundaries.size() << " " <<  segments.size() << " " << segmentsOutliers.size() << std::endl;
 		//check for background planes
-		float percentOfSize = 0.05; //TODO to constants
-		float sizeThresh = -0.10;//TODO to constants TODO the value should be smaller when kinect is closer
+        float percentOfSize = 0.05; //TODO to constants
+        float sizeThresh = -0.10;//TODO to constants TODO the value should be smaller when kinect is closer
 		std::vector<std::vector<float> > inboundaries;
 		std::vector<int> ignoreList;
 		for(int l=0; l < boundaries.size(); l++)
@@ -311,7 +312,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 									//if plane inside is large enough, this is to eliminate wrong values due to noise or small structures in a plane
 									if( percentOfSize*segments[l]->size() < segments[m]->size() )
 									{	
-										std::cout << "adding to ignoreList: " << l  << " of size: " << segments[l]->size() << " compared: " << m << " " << segments[m]->size() << std::endl;
+                                        //std::cout << "adding to ignoreList: " << l  << " of size: " << segments[l]->size() << " compared: " << m << " " << segments[m]->size() << std::endl;
 										ignoreList.push_back(l);
 									}
 								}							
@@ -332,22 +333,24 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			} else 
 			{
 				// ignoreList does not contain index
-				std::cout << "showing cloud: " << i << " of size: " << segments[i]->size() << std::endl;	
-				std::cout << "showing cloud: " << i << " of boundary: " << boundaries[i].at(0) << " " << boundaries[i].at(1) << " "<< boundaries[i].at(2) << " " << boundaries[i].at(3)  << std::endl;	
+                //std::cout << "showing cloud: " << i << " of size: " << segments[i]->size() << std::endl;
+                //std::cout << "showing cloud: " << i << " of boundary: " << boundaries[i].at(0) << " " << boundaries[i].at(1) << " "<< boundaries[i].at(2) << " " << boundaries[i].at(3)  << std::endl;
 				
 				*outliers += *segmentsOutliers[i];
-				//*planes += *segments[i];//TODO uncomment this to display planes
+                // add all other points with their original color for visualization
+                *planes += *segments[i];
 				
 				//check if point lies within boundries of the plane
-				float minDistThresh = -0.015; //TODO to constants
-				float maxDistThresh = -0.20; //TODO to constants
-				
+                float minDistThresh = -0.015; //TODO to constants
+                float maxDistThresh = -0.11; //TODO to constants
+                float minInThresh = 0.15; //TODO to constants
+                float maxInThresh = 0.15; //TODO to constants
+
 				int green = ((int)0) << 16 | ((int)255) << 8 | ((int)255);
 				int grey = ((int)1) << 16 | ((int)1) << 8 | ((int)1);
-				int redl = ((int)10) << 16 | ((int)0) << 8 | ((int)0);
-				//TODO this should use noNANCloud and not segments
-				//for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = segments[i]->begin(); it!= segments[i]->end(); it++)
-				for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = noNANCloud->begin(); it!= noNANCloud->end(); it++)
+                //int redl = ((int)100) << 16 | ((int)0) << 8 | ((int)0);
+                //int red = ((int)255) << 16 | ((int)0) << 8 | ((int)0);
+                for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = noNANCloud->begin(); it!= noNANCloud->end(); it++)
 				{
 					//put the point in plane equation of segment[i] ax + by + cz +d = val and minThresh < val < maxThresh
 					float val = planeCoeff[i].at(0)*it->x + planeCoeff[i].at(1)*it->y + planeCoeff[i].at(2)*it->z + planeCoeff[i].at(3) ;
@@ -360,15 +363,15 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 					
 					//std::cout << "boundaries for seg: " << i << ":" << boundaries[i].at(0) << ":"  << boundaries[i].at(1) << ": " << boundaries[i].at(2) << " " << boundaries[i].at(3) << std::endl;
 					//check if x y of point lies in the required range
-					if(boundaries[0].at(0) > p.x )
+                    if( (boundaries[i].at(0) - maxInThresh) > p.x )
 					{ 
-						if(boundaries[0].at(1) > p.y )
+                        if( (boundaries[i].at(1) - maxInThresh) > p.y )
 						{ 
-							if(boundaries[0].at(2) < p.x )
+                            if( (boundaries[i].at(2) + minInThresh) < p.x )
 							{ 
-								if( boundaries[0].at(3) < p.y )
+                                if( (boundaries[i].at(3) + minInThresh) < p.y )
 								{	
-									//if z of point is between the required range
+                                    //if z of point is between the required range
 									if(val < minDistThresh)
 									{
 										if(val > maxDistThresh)
@@ -377,75 +380,18 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 											//p.x = it->x;
 											//p.y = it->y;
 											//p.z = it->z;
-											p.rgb = green;//it->rgb;														
-											//planes->push_back(p);
+                                            p.rgb = green;//it->rgb;
+                                            planes->push_back(p);
 											//cout << "value and plane coeff: " << val << " " << planeCoeff[i].at(0) << " " << planeCoeff[i].at(1) << planeCoeff[i].at(2) << planeCoeff[i].at(3) << endl;
 										}
 									}
-								} else{
-									p.rgb = redl;
-								}
+                                }
 							}
 						}
 					}
-					
-					planes->push_back(p);
-				}
-				
-				/*for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it1 = segmentsOutliers[i]->begin(); it1 != segmentsOutliers[i]->end(); it1++)
-				{
-					//put the point in plane equation of segment[i] ax + by + cz +d = val and minThresh < val < maxThresh
-					float val = planeCoeff[i].at(0)*it1->x + planeCoeff[i].at(1)*it1->y + planeCoeff[i].at(2)*it1->z + planeCoeff[i].at(3) ;
-					
-					pcl::PointXYZRGBA p ;
-					p.x = it1->x;
-					p.y = it1->y;
-					p.z = it1->z;
-					p.rgb = grey;
-					
-					//check if x y of point lies in the required range
-					if(boundaries[i].at(0) > p.x )
-					{ 
-						if(boundaries[i].at(1) > p.y )
-						{ 
-							if(boundaries[i].at(2) < p.x )
-							{ 
-								if( boundaries[i].at(3) < p.y )
-								{	
-									//if z of point is between the required range
-									if(val < minDistThresh)
-									{
-										if(val > maxDistThresh)
-										{	
-											//pcl::PointXYZRGBA p ;
-											//p.x = it1->x;
-											//p.y = it1->y;
-											//p.z = it1->z;
-											p.rgb = green;//it1->rgb;														
-											//planes->push_back(p);
-											//cout << "value and plane coeff: " << val << " " << planeCoeff[i].at(0) << " " << planeCoeff[i].at(1) << planeCoeff[i].at(2) << planeCoeff[i].at(3) << endl;
-										}
-									}
-								}
-							}
-						}
-					}
-					planes->push_back(p);
-				}
-				*/
+                }
 
-				/* for adding outliers over multiple frames	
-				if (this->o.size() < 15)
-					{
-						this->o.push_back(segmentsOutliers[i]);
-					} else 
-					{
-						this->o.push_back(segmentsOutliers[i]);
-						//o.pop_front(); //TODO
-					}*/
-				
-				
-				/*// uncommment this to see convex hull points
+                /*// uncommment this to see convex hull points
 				pcl::PointCloud<pcl::PointXYZRGBA>::Ptr temp (new pcl::PointCloud<pcl::PointXYZRGBA>);
 				temp = segments[i];
 				pcl::ConvexHull<pcl::PointXYZRGBA> hull;
@@ -473,8 +419,6 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 				*planes += *objects;
 				//*planes += *surfaceHull;
 				*/
- 
-//std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr> o;// ( new std::vector<pcl::PointCloud<pcl::PointXYZRGBA>::Ptr>);				
 			}
 		}
 		
@@ -486,29 +430,13 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
     		it->rgb = red;
     	}
     	*/
-    	
-    	//TODO
-    	/*
-    	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr out;
-    	for(int i=0; i < this->o.size(); i++)
-    	{
-    		*out += *(this->o[i]);
-    	}
-    	for (pcl::PointCloud<pcl::PointXYZRGBA>::iterator it = out->points.begin(); it < out->points.end(); it++)
-    	{	
-    		int red = ((int)255) << 16 | ((int)0) << 8 | ((int)0);
-    		it->rgb= red;
-    	}
-    	//TODO
-    	*planes += *out;
-    	*/
-    	
-    	//*planes += *outliers;
-    	
+
+        // *planes += *outliers;
+        /* uncomment to see segments
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr newCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
-    	//for(int i =0;i<segments.size();i++)
+        for(int i =0;i<segments.size();i++)
     	{
-			for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it1 = segments[0]->begin(); it1 != segments[0]->end(); it1++)
+            for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it1 = segments[i]->begin(); it1 != segments[i]->end(); it1++)
     		{
     			pcl::PointXYZRGBA p ;
 				p.x = it1->x;
@@ -518,10 +446,49 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
     			newCloud->push_back(p);
     		}
 
-    	}
-    	coloredCloud = newCloud;
-		//coloredCloud = planes;
-		//a->clear();
+        }
+        coloredCloud = newCloud;*/
+
+        // color neighbours of detected area
+        //----nearest neighbours----//
+        pcl::KdTreeFLANN<pcl::PointXYZRGBA> kdtree;
+        kdtree.setInputCloud (planes);
+        //std::vector<int> pointIdxRadiusSearch;
+        //std::vector<float> pointRadiusSquaredDistance;
+        //float radius = 0.03 ;//TODO to constants
+        // find K nearest neighbor
+        int K = 10;//TODO to constants
+        float distThresh = 0.05; //TODO to constants
+        std::vector<int> pointIdxNKNSearch(K);
+        std::vector<float> pointNKNSquaredDistance(K);
+
+        int green1 = ((int)0) << 16 | ((int)255) << 8 | ((int)255);
+        for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it1 = planes->begin(); it1 != planes->end(); it1++)
+        {
+            if (it1->rgb == green1)
+            {
+                pcl::PointXYZRGBA point ;
+                point.x = it1->x;
+                point.y = it1->y;
+                point.z = it1->z;
+                point.rgba = it1->rgba;
+                if ( kdtree.nearestKSearch (point, K, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
+                {
+                    for (size_t i = 0; i < pointIdxNKNSearch.size(); ++i)
+                    {
+                        if(pointNKNSquaredDistance[i] < distThresh)
+                        {
+                            planes->points[pointIdxNKNSearch[i]].rgba = green1;
+                        }
+                    }
+                }
+            }
+        }
+
+
+        coloredCloud = planes;
+
+        //a->clear();
 		//TODO clear segments and all other clouds after use
 		//TODO 
 		//TODO  check if plane_parallel_ransac is working as expected
@@ -590,7 +557,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		if ( kdtree.nearestKSearch (point, K, pointIdxNKNSearch, pointNKNSquaredDistance) > 0 )
 		{
 		    for (size_t i = 0; i < pointIdxNKNSearch.size(); ++i){
-				if(pointNKNSquaredDistance[i] > distThresh){
+                if(pointNKNSquaredDistance[i] < distThresh){
 					//point.rgba = rgb2;
 				}
 			}
@@ -636,42 +603,8 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			
 		}
 		*/
-		
-		/*
-		//--------------do segmentation------------//
-		pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
-		pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
-		// Create the segmentation object
-		pcl::SACSegmentation<pcl::PointXYZRGBA> seg;
-		// Optional
-		seg.setOptimizeCoefficients (true);
-		// Mandatory
-		seg.setModelType (pcl::SACMODEL_PLANE);
-		seg.setMethodType (pcl::SAC_RANSAC);
-		seg.setDistanceThreshold (0.03);
 
-		seg.setInputCloud (cloudFiltered);
-		seg.segment (*inliers, *coefficients);
-
-		//int min_points_of_plane = 100;
-		//if (inliers->indices.size () < min_points_of_plane)  {
-		
-		// Extract the inliers
-		extract.setInputCloud (cloudFiltered);
-		extract.setIndices (inliers);
-		extract.setNegative (false);
-		// Get the points associated with the planar surface
-		extract.filter (*cloudPlane);
-		
-		// Extract points above plane, remove the planar inliers, extract the rest
-		//extract.setNegative (true);
-		//extract.filter (*cloudOnplane);
-		*/
-
-
-
-	    
-	    /*// uncomment this for normal visuallization, and remove visualizer from doorHandle.cpp or use doorHandle.cpp_normalVisualisation
+        /*// uncomment this for normal visuallization, and remove visualizer from doorHandle.cpp or use doorHandle.cpp_normalVisualisation
 		// --------------------------------------------------------
 	    // -----Open 3D viewer and add point cloud and normals-----
 	    // --------------------------------------------------------

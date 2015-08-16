@@ -19,39 +19,39 @@
 class DoorHandle {
 public:
 	DoorHandle() :
-			viewer("PCL OpenNI Viewer") {
-	}
+            viewer("PCL OpenNI Viewer") {
+    }
 
-	pcl::visualization::CloudViewer viewer;
-	Detect detect;
+    pcl::visualization::CloudViewer viewer;
+    Detect detect;
 
     //for GNG
     GNG gng;
-	//callback function
+
+    //callback function
 	void cloud_cb_(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
-		if (!viewer.wasStopped()) {
-			pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr outCloud;
+        if (!viewer.wasStopped()) {
+            pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr outCloud;
+
+            //choose between detect or gng
             outCloud = detect.startDetection(cloud);
             //outCloud = gng.startGNG(cloud);
+
             viewer.showCloud(outCloud);
             //usleep(5000000);
 		}
-	}
+    }
 
 	void run() {
 		//read file
 		// for oni file uncomment code below
 		pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured.oni",
-		//pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured_drawer.oni",
-				false, false);
-		
+                        false, false);
 		/*
 		//for pcd file uncomment code below
 		boost::shared_ptr<pcl::PCDGrabber<pcl::PointXYZRGBA> > interface;
 		interface.reset (new pcl::PCDGrabber<pcl::PointXYZRGBA> ("../data/other/kitchen/Rf3.pcd", 1, true)); 			
 		*/
-		
-		
 		
 		//register callback
 		boost::function<
@@ -73,6 +73,6 @@ public:
 
 int main() {
 	DoorHandle dh;
-	dh.run();
+    dh.run();
 	return 0;
 }
