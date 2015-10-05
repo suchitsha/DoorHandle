@@ -71,6 +71,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr GNG::startGNG(
         std::vector<pcl::PointXYZRGBA> input;
         std::vector<Node> nodes;
 
+        // TODO to gng.h
         //constants
         float eb = 0.2;
         float en = 0.006;
@@ -164,7 +165,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr GNG::startGNG(
                     // TODO check if node.id and nodes[index] are same
                     if(nodes[id2].id != id2)
                     {
-                        cout << "problem" << endl;
+                        std::cout << "problem" << std::endl;
                     }
                     nodes[id2].point.x = nodes[id2].point.x + en*(it->x - nodes[id2].point.x);
                     nodes[id2].point.y = nodes[id2].point.y + en*(it->y - nodes[id2].point.y);
@@ -175,7 +176,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr GNG::startGNG(
                     // TODO check if node.id and nodes[index] are same
                     if(nodes[id1].id != id1)
                     {
-                        cout << "problem" << endl;
+                        std::cout << "problem" << std::endl;
                     }
                     nodes[id1].point.x = nodes[id1].point.x + en*(it->x - nodes[id1].point.x);
                     nodes[id1].point.y = nodes[id1].point.y + en*(it->y - nodes[id1].point.y);

@@ -40,12 +40,18 @@
 #include <pcl/surface/convex_hull.h>
 #include <pcl/filters/crop_hull.h>
 
+#include <pcl/sample_consensus/sac_model_sphere.h>
+#include <pcl/sample_consensus/ransac.h>
+#include <pcl/segmentation/region_growing_rgb.h>
+
+#include <pcl/segmentation/conditional_euclidean_clustering.h>
+
 //TODO remove this when not needed
 #include <pcl/visualization/pcl_visualizer.h>
+
 using namespace pcl;
 
-pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
-		const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
+pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud , float (&a)[3],float (&b)[3] ) {
 		// coordinates of y axis
 		Eigen::Vector3f axis = Eigen::Vector3f(0.0,1.0,0.0);
 		 
@@ -324,6 +330,8 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 		}
 		//TODO
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr planes (new pcl::PointCloud<pcl::PointXYZRGBA>);
+        pcl::PointCloud<pcl::PointXYZRGBA>::Ptr handle (new pcl::PointCloud<pcl::PointXYZRGBA>);
+        pcl::PointCloud<pcl::PointXYZRGBA>::Ptr final (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr outliers (new pcl::PointCloud<pcl::PointXYZRGBA>);
 		for(int i=0; i < boundaries.size(); i++)
 		{
@@ -347,7 +355,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
                 float maxInThresh = 0.15; //TODO to constants
 
 				int green = ((int)0) << 16 | ((int)255) << 8 | ((int)255);
-				int grey = ((int)1) << 16 | ((int)1) << 8 | ((int)1);
+                //int grey = ((int)1) << 16 | ((int)1) << 8 | ((int)1);
                 //int redl = ((int)100) << 16 | ((int)0) << 8 | ((int)0);
                 //int red = ((int)255) << 16 | ((int)0) << 8 | ((int)0);
                 for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it = noNANCloud->begin(); it!= noNANCloud->end(); it++)
@@ -359,7 +367,7 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 					p.x = it->x;
 					p.y = it->y;
 					p.z = it->z;
-					p.rgb = grey;
+                    //p.rgb = it->rgb;
 					
 					//std::cout << "boundaries for seg: " << i << ":" << boundaries[i].at(0) << ":"  << boundaries[i].at(1) << ": " << boundaries[i].at(2) << " " << boundaries[i].at(3) << std::endl;
 					//check if x y of point lies in the required range
@@ -381,7 +389,8 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 											//p.y = it->y;
 											//p.z = it->z;
                                             p.rgb = green;//it->rgb;
-                                            planes->push_back(p);
+                                            //planes->push_back(p);
+                                            handle->push_back(p);
 											//cout << "value and plane coeff: " << val << " " << planeCoeff[i].at(0) << " " << planeCoeff[i].at(1) << planeCoeff[i].at(2) << planeCoeff[i].at(3) << endl;
 										}
 									}
@@ -422,16 +431,6 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
 			}
 		}
 		
-		/*
-		//colour the outliers red
-		for (pcl::PointCloud<pcl::PointXYZRGBA>::iterator it = outliers->points.begin(); it < outliers->points.end(); it++)
-    	{	
-    		int red = ((int)255) << 16 | ((int)0) << 8 | ((int)0);
-    		it->rgb = red;
-    	}
-    	*/
-
-        // *planes += *outliers;
         /* uncomment to see segments
 		pcl::PointCloud<pcl::PointXYZRGBA>::Ptr newCloud (new pcl::PointCloud<pcl::PointXYZRGBA>);
         for(int i =0;i<segments.size();i++)
@@ -449,6 +448,11 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
         }
         coloredCloud = newCloud;*/
 
+
+
+
+
+        /* Uncomment to see k nearest neighbours colored
         // color neighbours of detected area
         //----nearest neighbours----//
         pcl::KdTreeFLANN<pcl::PointXYZRGBA> kdtree;
@@ -484,9 +488,125 @@ pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr Detect::startDetection(
                 }
             }
         }
+        */
 
+        //make clusters of handle candidate
+        // Creating the KdTree object for the search method of the extraction
+        pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBA>);
+        tree->setInputCloud(handle);
+        std::vector<pcl::PointIndices> cluster_indices;
+        pcl::EuclideanClusterExtraction<pcl::PointXYZRGBA> ec;
+        //TODO try these parameters  and set them as constants
+        ec.setClusterTolerance (0.10);
+        ec.setMinClusterSize (2);
+        ec.setMaxClusterSize (handle->size());
+        ec.setSearchMethod(tree);
+        ec.setInputCloud(handle);
+        ec.extract(cluster_indices);
+
+
+        int j = 0;
+        for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
+        {
+          pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZRGBA>);
+          for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); ++pit)
+          {
+            cloud_cluster->points.push_back(handle->points[*pit]);
+          }
+          cloud_cluster->width = cloud_cluster->points.size();
+          cloud_cluster->height = 1;
+          cloud_cluster->is_dense = true;
+
+          //std::cout << "PointCloud representing the Cluster" << j << " : " << cloud_cluster->points.size() << " data points." << std::endl;
+          j++;
+
+
+          //line
+          pcl::SACSegmentation<pcl::PointXYZRGBA> segm;
+          pcl::PointIndices::Ptr inliersLine(new pcl::PointIndices);
+          pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+          segm.setModelType(pcl::SACMODEL_LINE);
+          segm.setMethodType(pcl::SAC_RANSAC);
+          //TODO try these parameters  and set them as constants
+          segm.setDistanceThreshold(0.15);//.006
+          segm.setInputCloud(cloud_cluster);
+          segm.segment(*inliersLine, *coefficients);
+          //std::cout << "inliers: " << *inliersLine << std::endl;
+          //std::cout << "coefficients: " << *coefficients << std::endl;
+
+          Eigen::Vector4f tmax, tmin;
+          pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tmpObject (new pcl::PointCloud<pcl::PointXYZRGBA>);
+          pcl::ExtractIndices<pcl::PointXYZRGBA> ext;
+          ext.setInputCloud(cloud_cluster);
+          ext.setNegative(false);
+          ext.setIndices(boost::make_shared<pcl::PointIndices>(*inliersLine));
+          ext.filter(*tmpObject);
+
+          /*
+          // Remove the planar inliers, extract the rest
+          pcl::PointCloud<pcl::PointXYZRGBA>::Ptr tmpOutliers (new pcl::PointCloud<pcl::PointXYZRGBA>);
+          ext.setNegative(true);
+          ext.filter (*tmpOutliers);
+
+          // if there are lots of outliers, probably its not a line but rounded object so ignore it
+          if( tmpOutliers->size() > (0.1 * tmpObject->size()) )
+          {
+              //skip this cluster
+              continue;
+          }
+          */
+
+          pcl::getMinMax3D(*tmpObject, tmin, tmax);
+
+          //std::cout << "tmax: " << tmax << std::endl;
+          //std::cout << "tmin: " << tmin << std::endl;
+
+          a[0] = tmin[0];//coefficients->values[0];//tmin[0];//x
+          a[1] = tmin[1];//coefficients->values[1];//tmin[1];//y
+          a[2] = tmin[2];//coefficients->values[2];//tmin[2];//z
+          b[0] = tmax[0] - tmin[0]; //coefficients->values[3];//tmax[0];//direction x
+          b[1] = tmax[1] - tmin[1]; //coefficients->values[4];//tmax[1];// dir y
+          b[2] = tmax[2] - tmin[2]; //coefficients->values[5];//tmax[2];//dir z
+          //std::cout << "a b: " << a[0] << " " << a[1] << a[2] << " " << b[0] <<  b[1] << " " << b[2] << std::endl;
+
+          for(int i=0; i < inliersLine->indices.size(); i++)
+          {
+              pcl::PointXYZRGBA p = cloud_cluster->at(inliersLine->indices[i]);
+              //TODO put this into a variable
+              p.rgb = ((int)1) << 16 | ((int)(j*10)) << 8 | ((int)255);
+              planes->push_back(p);
+          }
+          // display only largest cluster
+          //break;
+        }
+
+        //fit line/sphere/cylender
+        //sphere
+        std::vector<int> inliers;
+        // created RandomSampleConsensus object and compute the appropriated model
+        pcl::SampleConsensusModelSphere<pcl::PointXYZRGBA>::Ptr model_s(new pcl::SampleConsensusModelSphere<pcl::PointXYZRGBA> (handle));
+        //TODO get size through command line
+        model_s->setRadiusLimits(0.012, 0.0675);
+        pcl::RandomSampleConsensus<pcl::PointXYZRGBA> ransc (model_s);
+        ransc.setDistanceThreshold(.02);//.01
+        ransc.computeModel();
+        ransc.getInliers(inliers);
+
+        // copies all inliers of the model computed to another PointCloud
+        pcl::copyPointCloud<pcl::PointXYZRGBA>(*handle, inliers, *final);
+        for(pcl::PointCloud<pcl::PointXYZRGBA>::const_iterator it1 = final->begin(); it1 != final->end(); it1++)
+        {
+            pcl::PointXYZRGBA p;
+            p.x = it1->x;
+            p.y = it1->y;
+            p.z = it1->z;
+            //TODO put this into a variable
+            p.rgb = ((int)255) << 16 | ((int)0) << 8 | ((int)0);
+            planes->push_back(p);
+        }
 
         coloredCloud = planes;
+
 
         //a->clear();
 		//TODO clear segments and all other clouds after use

@@ -19,12 +19,9 @@
 class DoorHandle {
 public:
 	DoorHandle() :
-            viewer("PCL OpenNI Viewer") {
-    }
-
+    viewer("PCL OpenNI Viewer") {}
     pcl::visualization::CloudViewer viewer;
     Detect detect;
-
     //for GNG
     GNG gng;
 
@@ -32,17 +29,15 @@ public:
 	void cloud_cb_(const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud) {
         if (!viewer.wasStopped()) {
             pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr outCloud;
-
             //choose between detect or gng
             outCloud = detect.startDetection(cloud);
             //outCloud = gng.startGNG(cloud);
-
             viewer.showCloud(outCloud);
-            //usleep(5000000);
 		}
     }
 
-	void run() {
+    void run()
+    {
 		//read file
 		// for oni file uncomment code below
 		pcl::Grabber* interface = new pcl::ONIGrabber("../data/Captured.oni",
@@ -62,11 +57,12 @@ public:
 		interface->start();
 
 		//start viewer
-		while (!viewer.wasStopped()) {
+        while (!viewer.wasStopped())
+        {
 			interface->start();
-			boost::this_thread::sleep (boost::posix_time::seconds (1));
-		}
-		PCL_INFO("Completed reading file.\n");
+            //boost::this_thread::sleep (boost::posix_time::seconds (1));
+        }
+        PCL_INFO("Completed reading file.\n");
 		interface->stop();
 	}
 };

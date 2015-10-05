@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 
-ADD_EXECUTABLE(${NAME} DoorHandle
+ADD_EXECUTABLE(${NAME} DoorHandle2
 		       Detect GNG
                        )
 TARGET_LINK_LIBRARIES(${NAME} ${LOG4CXX_LIBRARIES} 

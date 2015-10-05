@@ -26,7 +26,7 @@ public:
 	}
 
 	pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr startDetection(
-			const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud);
+            const pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr &cloud, float (&a)[3], float (&b)[3]);
 	
 	log4cxx::LoggerPtr logger;
 
